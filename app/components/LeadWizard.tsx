@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { supabase } from '../lib/supabase'
 
 interface Selections {
   serviceType: string
@@ -148,6 +149,8 @@ export default function LeadWizard() {
   const [quote, setQuote] = useState<QuoteResult | null>(null)
   const [errors, setErrors] = useState<Partial<ContactInfo>>({})
   const [inspectionBooked, setInspectionBooked] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const totalQuestionSteps = 5
   const isOnQuestion = step >= 1 && step <= totalQuestionSteps
@@ -189,10 +192,30 @@ export default function LeadWizard() {
     return Object.keys(newErrors).length === 0
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validateContact()) return
     const result = calculateQuote(selections)
+    setIsSubmitting(true)
+    setSubmitError(null)
+    const { error } = await supabase.from('leads').insert({
+      full_name: contact.fullName,
+      email: contact.email,
+      phone: contact.phone,
+      service_type: selections.serviceType,
+      roof_size: selections.roofSize,
+      urgency: selections.urgency,
+      roof_condition: selections.roofCondition,
+      insurance_status: selections.insuranceStatus,
+      estimated_quote_low: result.low,
+      estimated_quote_high: result.high,
+    })
+    setIsSubmitting(false)
+    if (error) {
+      console.error('Supabase insert error:', error)
+      setSubmitError('Something went wrong saving your information. Please try again.')
+      return
+    }
     setQuote(result)
     setStep(7)
   }
@@ -330,6 +353,10 @@ export default function LeadWizard() {
               )}
             </div>
 
+            {submitError && (
+              <p className="text-red-400 text-sm text-center">{submitError}</p>
+            )}
+
             <div className="pt-2 flex gap-3">
               <button
                 type="button"
@@ -340,14 +367,14 @@ export default function LeadWizard() {
               </button>
               <button
                 type="submit"
-                disabled={!isFormValid}
+                disabled={!isFormValid || isSubmitting}
                 className={`flex-1 text-sm font-semibold py-3 rounded-xl transition-all duration-200 ${
-                  isFormValid
+                  isFormValid && !isSubmitting
                     ? 'bg-orange-500 hover:bg-amber-700 text-white shadow-[0_0_20px_rgba(249,115,22,0.4)]'
                     : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
                 }`}
               >
-                Get My Free Estimate
+                {isSubmitting ? 'Submitting...' : 'Get My Free Estimate'}
               </button>
             </div>
           </form>
